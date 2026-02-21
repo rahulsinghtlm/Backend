@@ -1,13 +1,18 @@
 import mongoose, { connect } from "mongoose";
-import {DB_NAME} from "./constants.js";    
+import express from "express"
 import connectDB from "./db/index.js";
 import dotenv from "dotenv";
+import userRouter from "./routes/user.routes.js"
 
-
+const app = express()
 dotenv.config({
-    path: './env'
+    path: './.env'
 })
 
+app.get("/health", (req,res)=>{
+    res.send(`hello from server`)
+})
+app.use("/api/v1/users", userRouter);
 
 connectDB()
 .then  (() => {

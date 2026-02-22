@@ -131,11 +131,22 @@ const loginUser = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Invalid password");
   }
 
-  return res.status(200).json({
-    success: true,
-    message: "Login successful"
-  });
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id);
 
+  const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+  };
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, cookieOptions)
+    .cookie("refreshToken", refreshToken, cookieOptions)
+    .json(
+      new ApiResponse(200, { user: loggedInUser }, "Login successful")
+    );
 });
 
 const logoutUser = asyncHandler(async(req, res) => {
@@ -151,15 +162,15 @@ const logoutUser = asyncHandler(async(req, res) => {
         }
     )
 
-    const options = {
+    const cookieOptions = {
         httpOnly: true,
-        secure: true
-    }
+        secure: process.env.NODE_ENV === "production",
+    };
 
     return res
     .status(200)
-    .clearCookie("accessToken", options)
-    .clearCookie("refreshToken", options)
+    .clearCookie("accessToken", cookieOptions)
+    .clearCookie("refreshToken", cookieOptions)
     .json(new ApiResponse(200, {}, "User logged out Successfully"))
 
 })

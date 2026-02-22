@@ -1,19 +1,8 @@
-import {asyncHandler} from "../utils/asyncHandler.js";
-import express from "express"
-import {ApiError} from "../utils/ApiError.js"
-import {User} from "../models/user.models.js"
-import {uploadOnCloudinary} from "../utils/cloudinary.js"
-// import { upload } from "../middlewares/multer.middleware.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import { ApiError } from "../utils/ApiError.js";
+import { User } from "../models/user.models.js";
+import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import cookieParser from "cookie-parser";
-
-
-const app = express()
-
-
-app.use(cookieParser());
-app.use(express.json());
-
 
 const generateAccessAndRefreshTokens = async(userId) => {
     try {
@@ -61,25 +50,24 @@ console.log("FILES:", req.files)
     }
 
 const avatarLocalPath = req.files?.avatar?.[0]?.path;
-//const coverImageLocalPath = req.files?.coverImage?.[0]?.path;
-  
-let coverImageLocalPath;
-    if (req.files && Array.isArray(req.files.coverImage) 
-        && req.files.coverImage.length > 0) {
-        coverImageLocalPath = req.files.coverImage[0].path        
+    let coverImageLocalPath;
+    if (req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0) {
+        coverImageLocalPath = req.files.coverImage[0].path;
     }
 
     if (!avatarLocalPath) {
-         throw new ApiError(400, "avatar file is required")   
+        throw new ApiError(400, "Avatar file is required");
     }
-  
-    const avatar = await uploadOnCloudinary(avatarLocalPath)
-    const coverImage = await uploadOnCloudinary(coverImageLocalPath)
 
-    if(!avatar){
-       throw new ApiError(400, "All fields are required")    
+    const avatar = await uploadOnCloudinary(avatarLocalPath);
+    const coverImage = coverImageLocalPath
+        ? await uploadOnCloudinary(coverImageLocalPath)
+        : null;
+
+    if (!avatar) {
+        throw new ApiError(400, "Avatar upload failed");
     }
- 
+
     const user = await User.create({
         fullname,
         avatar: avatar.url,
@@ -98,7 +86,7 @@ let coverImageLocalPath;
     }
 
     return res.status(201).json(
-        new ApiResponse(200, createdUser, "User registered Succesfully")
+        new ApiResponse(201, createdUser, "User registered successfully")
     )
     
 } catch (error) {
@@ -131,11 +119,22 @@ const loginUser = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Invalid password");
   }
 
-  return res.status(200).json({
-    success: true,
-    message: "Login successful"
-  });
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id);
 
+  const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+  };
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, cookieOptions)
+    .cookie("refreshToken", refreshToken, cookieOptions)
+    .json(
+      new ApiResponse(200, { user: loggedInUser }, "Login successful")
+    );
 });
 
 const logoutUser = asyncHandler(async(req, res) => {
@@ -151,15 +150,15 @@ const logoutUser = asyncHandler(async(req, res) => {
         }
     )
 
-    const options = {
+    const cookieOptions = {
         httpOnly: true,
-        secure: true
-    }
+        secure: process.env.NODE_ENV === "production",
+    };
 
     return res
     .status(200)
-    .clearCookie("accessToken", options)
-    .clearCookie("refreshToken", options)
+    .clearCookie("accessToken", cookieOptions)
+    .clearCookie("refreshToken", cookieOptions)
     .json(new ApiResponse(200, {}, "User logged out Successfully"))
 
 })
